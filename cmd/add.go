@@ -25,7 +25,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/zalando/go-keyring"
 )
 
@@ -35,7 +34,6 @@ var addCmd = &cobra.Command{
 	Short: "Add a new account",
 	Long:  `Add a new Amp account to amped by saving the current logged in account to the keyring with a given name.`,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Check if an account with the given name already exists
 		saved, err := keyring.Get("amped", args[0])
 		if saved != "" {
@@ -46,7 +44,7 @@ var addCmd = &cobra.Command{
 
 		// Extract the API key from the Amp secrets.json file
 
-		apiKey, err := internal.ExtractApiKey(viper.GetString("secrets"))
+		apiKey, err := internal.ExtractApiKey(internal.Viper.GetString("secrets"))
 		if err != nil {
 			log.Fatal("unable to extract api key from amp secrets.json", "error", err)
 		}
@@ -63,6 +61,11 @@ var addCmd = &cobra.Command{
 		}
 		log.Debug("retrieved api key from keyring", "apiKey", retrievedApiKey)
 		log.Info("successfully added account to keyring", "name", args[0])
+		err = internal.AppendToAccounts(internal.Viper.GetString("accounts"), internal.AmpedAccount{Name: args[0]})
+		if err != nil {
+			log.Fatal("unable to add account to accounts list", "error", err)
+		}
+		log.Debug("successfully added account to accounts list", "name", args[0])
 	},
 	Args: cobra.ExactArgs(1),
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/zalando/go-keyring"
 )
 
@@ -47,11 +46,44 @@ Provide the name of the saved account to switch to.`,
 		}
 		log.Debug("read api key from keyring", "accountName", name, "apiKey", key)
 
-		err = internal.WriteToAmpSecrets(key, viper.GetString("secrets"))
+		err = internal.WriteToAmpSecrets(key, internal.Viper.GetString("secrets"))
 		if err != nil {
 			log.Fatal("unable to write api key to amp secrets.json", "error", err)
 		}
 		log.Info("switched amp account successfully", "accountName", name)
+
+		// Update the current account in the accounts list
+		err = internal.UpdateActiveAccount(internal.Viper.GetString("accounts"), name)
+		if err != nil {
+			log.Fatal("unable to update current account in accounts list", "error", err)
+		}
+		log.Debug("successfully updated current account in accounts list", "accountName", name)
+
+		// Make sure that the keyring api key and amp secrets.json api key match
+		verifiedApiKey, err := internal.ExtractApiKey(internal.Viper.GetString("secrets"))
+		if err != nil {
+			log.Fatal("unable to extract api key from amp secrets.json for verification", "error", err)
+		}
+		if verifiedApiKey != key {
+			log.Fatal("api key in amp secrets.json does not match the one in keyring after switching account", "accountName", name)
+		}
+		log.Debug("verified that api key in amp secrets.json matches the one in keyring", "accountName", name)
+
+		// It is NOT needed to delete threads/history when switching accounts.
+
+		// // Delete all threads
+		// err = internal.DeleteAllThreads(internal.Viper.GetString("threads"))
+		// if err != nil {
+		// 	log.Fatal("unable to delete amp threads", "error", err)
+		// }
+		// log.Info("successfully deleted all amp threads after switching account")
+
+		// // Delete history file
+		// err = internal.DeleteHistoryFile(internal.Viper.GetString("history"))
+		// if err != nil {
+		// 	log.Fatal("unable to delete amp history file", "error", err)
+		// }
+		// log.Info("successfully deleted amp history file after switching account")
 	},
 }
 

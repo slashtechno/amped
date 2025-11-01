@@ -46,6 +46,14 @@ var deleteCmd = &cobra.Command{
 				return
 			}
 			log.Info("successfully deleted all accounts from keyring")
+
+			// Also clear accounts list
+			err = internal.WriteToAccounts(internal.Viper.GetString("accounts"), internal.AmpedAccounts{Accounts: []internal.AmpedAccount{}})
+			if err != nil {
+				log.Fatal("unable to clear accounts list", "error", err)
+				return
+			}
+			log.Info("successfully cleared accounts list")
 			return
 		} else if len(args) == 0 {
 			// Make sure that if --delete-all is not set, an account name is provided
@@ -60,6 +68,12 @@ var deleteCmd = &cobra.Command{
 			return
 		}
 		log.Info("successfully deleted account from keyring", "name", args[0])
+		err = internal.DeleteFromAccounts(internal.Viper.GetString("accounts"), args[0])
+		if err != nil {
+			log.Fatal("unable to delete account from accounts list", "name", args[0], "error", err)
+			return
+		}
+		log.Debug("successfully deleted account from accounts list", "name", args[0])
 	},
 }
 

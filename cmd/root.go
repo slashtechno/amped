@@ -27,27 +27,30 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/charmbracelet/log"
+	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cfgFile string
 
 var defaultAmpedConfigPath string
 
+// defaultAmpSecretsPath doesn't need to be glboal
+var defaultAmpedAccountsPath string
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "amped",
 	Short: "A utility to switch between Amp (http://ampcode.com/) accounts",
-	Long: `Switch between Amp (http://ampcode.com/) accounts by switching out ~/.local/share/amp/secrets.json
+	Long: fmt.Sprintf(`Switch between Amp (http://ampcode.com/) accounts by switching out %s
 First, log in with an Amp account using the Amp CLI and then, run 'amped add <name>' to save the account.
 Then, you can switch between saved accounts using 'amped switch <name>'
-To delete a saved account (won't log you out if it's the active account), use 'amped delete <name>'`,
+To delete a saved account (won't log you out if it's the active account), use 'amped delete <name>'`, defaultAmpedAccountsPath),
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) {},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		log.Info("amped called", "ampSecretsPath", viper.GetString("secrets"), "configFile", viper.ConfigFileUsed(), "logLevel", viper.GetString("log"), "args", args)
+		// log.Debug("amped called", "ampSecretsPath", internal.Viper.GetString("secrets"), "configFile", internal.Viper.ConfigFileUsed(), "logLevel", internal.Viper.GetString("log"), "args", args)
 	},
 }
 
@@ -61,7 +64,7 @@ func Execute() {
 }
 
 func init() {
-	log.SetLevel(log.DebugLevel)
+	// log.SetLevel(log.InfoLevel)
 	// get xdg paths
 	defaultAmpSecretsPath, err := xdg.DataFile("amp/secrets.json")
 	if err != nil {
@@ -73,42 +76,78 @@ func init() {
 		log.Fatal("unable to get xdg config file path for amped config.json", "error", err)
 	}
 
+	// defaultAmpThreadsPath, err := xdg.DataFile("amp/threads")
+	// if err != nil {
+	// 	log.Fatal("unable to get xdg data file path for amp threads", "error", err)
+	// }
+
+	// defaultAmpHistoryPath, err := xdg.DataFile("amp/history.json")
+	// if err != nil {
+	// 	log.Fatal("unable to get xdg data file path for amp history.json", "error", err)
+	// }
+
+	defaultAmpedAccountsPath, err = xdg.StateFile("amped.json")
+	if err != nil {
+		log.Fatal("unable to get xdg state file path for amped accounts.json", "error", err)
+	}
+
 	configFileHelp := fmt.Sprintf("config file (default is %s)", defaultAmpedConfigPath)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", configFileHelp)
-
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringP("secrets", "s", "", "path to amp secrets.json file")
-	viper.BindPFlag("secrets", rootCmd.PersistentFlags().Lookup("secrets"))
-	viper.SetDefault("secrets", defaultAmpSecretsPath)
+	rootCmd.PersistentFlags().StringP("secrets", "s", "", fmt.Sprintf("path to Amp secrets file (default is %s)", defaultAmpSecretsPath))
+	rootCmd.MarkFlagFilename("secrets", "json")
+	internal.Viper.BindPFlag("secrets", rootCmd.PersistentFlags().Lookup("secrets"))
+	internal.Viper.SetDefault("secrets", defaultAmpSecretsPath)
+
+	// rootCmd.PersistentFlags().String("threads", "", fmt.Sprintf("path to Amp threads directory (default is %s)", defaultAmpThreadsPath))
+	// rootCmd.MarkFlagDirname("threads")
+	// internal.Viper.BindPFlag("threads", rootCmd.PersistentFlags().Lookup("threads"))
+	// internal.Viper.SetDefault("threads", defaultAmpThreadsPath)
+
+	// rootCmd.PersistentFlags().String("history", "", fmt.Sprintf("path to Amp history file (default is %s)", defaultAmpHistoryPath))
+	// rootCmd.MarkFlagFilename("history", "json")
+	// internal.Viper.BindPFlag("history", rootCmd.PersistentFlags().Lookup("history"))
+	// internal.Viper.SetDefault("history", defaultAmpHistoryPath)
+
+	rootCmd.PersistentFlags().String("accounts", "", fmt.Sprintf("path to Amp list of accounts file (default is %s)", defaultAmpedAccountsPath))
+	rootCmd.MarkFlagFilename("accounts", "json")
+	internal.Viper.BindPFlag("accounts", rootCmd.PersistentFlags().Lookup("accounts"))
+	internal.Viper.SetDefault("accounts", defaultAmpedAccountsPath)
 
 	rootCmd.PersistentFlags().StringP("log", "l", "info", "log level (debug, info, warn, error, fatal, panic)")
-	viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
-	viper.SetDefault("log", "debug")
+	internal.Viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
+	internal.Viper.SetDefault("log", "info")
 
 	cobra.OnInitialize(func() {
-		err := setupLogLevel(viper.GetString("log"))
+		err := setupLogLevel(internal.Viper.GetString("log"))
 		if err != nil {
 			log.Fatal("unable to set up log level", "error", err)
+		}
+	})
+
+	cobra.OnInitialize(func() {
+		err := internal.EnsureAccounts(internal.Viper.GetString("accounts"))
+		if err != nil {
+			log.Fatal("unable to ensure accounts file exists", "error", err)
 		}
 	})
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	fmt.Println("Initializing config")
 	if cfgFile != "" {
 		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+		internal.Viper.SetConfigFile(cfgFile)
 	} else {
-		viper.SetConfigFile(defaultAmpedConfigPath)
+		internal.Viper.SetConfigFile(defaultAmpedConfigPath)
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	internal.Viper.AutomaticEnv() // read in environment variables that match
 
 	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	if err := internal.Viper.ReadInConfig(); err == nil {
+		fmt.Fprintln(os.Stderr, "Using config file:", internal.Viper.ConfigFileUsed())
 	}
 }
 
