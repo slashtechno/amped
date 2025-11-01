@@ -29,44 +29,32 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// addCmd represents the add command
-var addCmd = &cobra.Command{
-	Use:   "add name",
-	Short: "Add a new account",
-	Long:  `Add a new Amp account to amped by saving the current logged in account to the keyring with a given name.`,
-	Run: func(cmd *cobra.Command, args []string) {
-
-		// Check if an account with the given name already exists
-		saved, err := keyring.Get("amped", args[0])
-		if saved != "" {
-			log.Fatal("account with the given name already exists", "name", args[0])
-		} else if err != keyring.ErrNotFound {
-			log.Fatal("error checking for existing account in keyring", "error", err)
-		}
-
-		// Extract the API key from the Amp secrets.json file
-
-		apiKey, err := internal.ExtractApiKey(viper.GetString("secrets"))
-		if err != nil {
-			log.Fatal("unable to extract api key from amp secrets.json", "error", err)
-		}
-		log.Debug("extracted api key from amp secrets.json", "apiKey", apiKey)
-
-		err = keyring.Set("amped", args[0], apiKey)
-		if err != nil {
-			log.Fatal("unable to save api key to keyring", "error", err)
-		}
-		// Try to retrieve the API key from the keyring
-		retrievedApiKey, err := keyring.Get("amped", args[0])
-		if err != nil {
-			log.Fatal("unable to retrieve api key from keyring", "error", err)
-		}
-		log.Debug("retrieved api key from keyring", "apiKey", retrievedApiKey)
-		log.Info("successfully added account to keyring", "name", args[0])
-	},
+// switchCmd represents the switch command
+var switchCmd = &cobra.Command{
+	Use:   "switch name",
+	Short: "Switch to a given saved Amp account",
+	Long: `Switch between saved Amp (http://ampcode.com/) accounts by switching out ~/.local/share/amp/secrets.json
+Provide the name of the saved account to switch to.`,
 	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		name := args[0]
+		// Check if the account exists
+		key, err := internal.ReadFromKeyring(name)
+		if err == keyring.ErrNotFound {
+			log.Fatal("no account found with the given name", "name", name)
+		} else if err != nil {
+			log.Fatal("failed to read from keyring", "error", err, "accountName", name)
+		}
+		log.Debug("read api key from keyring", "accountName", name, "apiKey", key)
+
+		err = internal.WriteToAmpSecrets(key, viper.GetString("secrets"))
+		if err != nil {
+			log.Fatal("unable to write api key to amp secrets.json", "error", err)
+		}
+		log.Info("switched amp account successfully", "accountName", name)
+	},
 }
 
 func init() {
-	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(switchCmd)
 }

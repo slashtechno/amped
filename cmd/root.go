@@ -40,7 +40,7 @@ var rootCmd = &cobra.Command{
 	Use:   "amped",
 	Short: "A utility to switch between Amp (http://ampcode.com/) accounts",
 	Long: `Switch between Amp (http://ampcode.com/) accounts by switching out ~/.local/share/amp/secrets.json
-First, log in with an Amp account using the Amp CLI and then, run 'amped save <name>' to save the account.
+First, log in with an Amp account using the Amp CLI and then, run 'amped add <name>' to save the account.
 Then, you can switch between saved accounts using 'amped switch <name>'
 To delete a saved account (won't log you out if it's the active account), use 'amped delete <name>'`,
 	// Uncomment the following line if your bare application
