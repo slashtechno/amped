@@ -1,0 +1,33 @@
+# This workflow builds and releases the CLI tool when a version tag is pushed.
+# To release: git tag v1.0.0 && git push --tags
+# To rollback: Delete the release on GitHub, delete the tag (git tag -d v1.0.0 && git push origin :refs/tags/v1.0.0), then tag and push again.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
