@@ -29,3 +29,11 @@ func DeleteFromKeyring(user string) error {
 	}
 	return nil
 }
+
+func DeleteAllFromKeyring() error {
+	err := keyring.DeleteAll("amped")
+	if err != nil {
+		return err
+	}
+	return nil
+}

@@ -22,7 +22,6 @@ THE SOFTWARE.
 package cmd
 
 import (
-
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
@@ -30,10 +29,32 @@ import (
 
 // deleteCmd represents the delete command
 var deleteCmd = &cobra.Command{
-	Use:   "delete name",
-	Short: "Delete a saved Amp account",
+	Use:   "delete [name]",
+	Args:  cobra.MaximumNArgs(1),
+	Short: "Delete a saved Amp account or delete all saved accounts (if --delete-all is used)",
 	Run: func(cmd *cobra.Command, args []string) {
-		err := internal.DeleteFromKeyring(args[0])
+		// Check if --delete-all flag is set
+		deleteAll, err := cmd.Flags().GetBool("delete-all")
+		if err != nil {
+			log.Fatal("unable to parse flags", "error", err)
+			return
+		}
+		if deleteAll {
+			err := internal.DeleteAllFromKeyring()
+			if err != nil {
+				log.Fatal("unable to delete all accounts from keyring", "error", err)
+				return
+			}
+			log.Info("successfully deleted all accounts from keyring")
+			return
+		} else if len(args) == 0 {
+			// Make sure that if --delete-all is not set, an account name is provided
+			log.Fatal("please provide an account name to delete or use --delete-all to delete all accounts")
+			return
+		}
+
+		// Delete specific account
+		err = internal.DeleteFromKeyring(args[0])
 		if err != nil {
 			log.Fatal("unable to delete account from keyring", "name", args[0], "error", err)
 			return
@@ -43,5 +64,6 @@ var deleteCmd = &cobra.Command{
 }
 
 func init() {
+	deleteCmd.Flags().BoolP("delete-all", "a", false, "Delete all saved Amp accounts (everything under the service \"amped\" in the keyring)")
 	rootCmd.AddCommand(deleteCmd)
 }
