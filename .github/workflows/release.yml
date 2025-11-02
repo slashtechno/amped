@@ -30,6 +30,7 @@ jobs:
           VERSION=${{ github.ref_name }}
           go build -o amped main.go
           HELP=$(./amped --help)
+          VERSION_NO_V=${VERSION#v}
           cat > release_notes.md << EOF
           ## Downloads
 
@@ -37,12 +38,12 @@ jobs:
 
           | OS      | Architecture | Download |
           |---------|--------------|----------|
-          | Linux   | x86_64      | [amped-linux-amd64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-linux-amd64) |
-          | Linux   | arm64       | [amped-linux-arm64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-linux-arm64) |
-          | Windows | x86_64      | [amped-windows-amd64.exe](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-windows-amd64.exe) |
-          | Windows | arm64       | [amped-windows-arm64.exe](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-windows-arm64.exe) |
-          | macOS   | x86_64      | [amped-darwin-amd64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-darwin-amd64) |
-          | macOS   | arm64       | [amped-darwin-arm64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-darwin-arm64) |
+          | Linux   | x86_64      | [amped-linux-amd64_${VERSION_NO_V}_linux_amd64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-linux-amd64_${VERSION_NO_V}_linux_amd64) |
+          | Linux   | arm64       | [amped-linux-arm64_${VERSION_NO_V}_linux_arm64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-linux-arm64_${VERSION_NO_V}_linux_arm64) |
+          | Windows | x86_64      | [amped-windows-amd64_${VERSION_NO_V}_windows_amd64.exe](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-windows-amd64_${VERSION_NO_V}_windows_amd64.exe) |
+          | Windows | arm64       | [amped-windows-arm64_${VERSION_NO_V}_windows_arm64.exe](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-windows-arm64_${VERSION_NO_V}_windows_arm64.exe) |
+          | macOS   | x86_64      | [amped-darwin-amd64_${VERSION_NO_V}_darwin_amd64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-darwin-amd64_${VERSION_NO_V}_darwin_amd64) |
+          | macOS   | arm64       | [amped-darwin-arm64_${VERSION_NO_V}_darwin_arm64](https://github.com/slashtechno/amped/releases/download/$VERSION/amped-darwin-arm64_${VERSION_NO_V}_darwin_arm64) |
 
           ## Help
 
