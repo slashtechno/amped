@@ -66,25 +66,23 @@ func Execute() {
 func init() {
 	// log.SetLevel(log.InfoLevel)
 	// get xdg paths
-	defaultAmpSecretsPath, err := xdg.DataFile("amp/secrets.json")
-	if err != nil {
-		log.Fatal("unable to get xdg data file path for amp secrets.json", "error", err)
-	}
 
-	defaultAmpedConfigPath, err = xdg.ConfigFile("amped.json")
+	defaultAmpedConfigPath, err := xdg.ConfigFile("amped.json")
 	if err != nil {
 		log.Fatal("unable to get xdg config file path for amped config.json", "error", err)
 	}
 
-	// defaultAmpThreadsPath, err := xdg.DataFile("amp/threads")
+	// defaultAmpSecretsPath, err := xdg.DataFile("amp/secrets.json")
 	// if err != nil {
-	// 	log.Fatal("unable to get xdg data file path for amp threads", "error", err)
+	// 	log.Fatal("unable to get xdg data file path for amp secrets.json", "error", err)
 	// }
 
-	// defaultAmpHistoryPath, err := xdg.DataFile("amp/history.json")
-	// if err != nil {
-	// 	log.Fatal("unable to get xdg data file path for amp history.json", "error", err)
-	// }
+	// Amp's data directory, on both Windows and Linux, is under ~/.local/share/amp
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal("unable to get user home directory", "error", err)
+	}
+	defaultAmpSecretsPath := fmt.Sprintf("%s/.local/share/amp/secrets.json", home)
 
 	defaultAmpedAccountsPath, err = xdg.StateFile("amped.json")
 	if err != nil {
