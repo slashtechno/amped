@@ -38,6 +38,3 @@ changelog:
       - '^test:'
 
 release:
-  header:
-    from_file:
-      path: release_notes.md
