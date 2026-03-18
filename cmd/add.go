@@ -22,52 +22,83 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"encoding/json"
+
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
 
-// addCmd represents the add command
 var addCmd = &cobra.Command{
 	Use:   "add name",
 	Short: "Add a new account",
-	Long:  `Add a new Amp account to amped by saving the current logged in account to the keyring with a given name.`,
+	Long:  `Save the currently logged-in account to the keyring under a given name.`,
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check if an account with the given name already exists
-		saved, err := keyring.Get("amped", args[0])
+		name := args[0]
+
+		svc, err := resolveService()
+		if err != nil {
+			log.Fatal("unable to determine service", "error", err)
+		}
+
+		// Check if an account with this name already exists for the service
+		saved, err := internal.ReadFromKeyring(svc, name)
 		if saved != "" {
-			log.Fatal("account with the given name already exists", "name", args[0])
+			log.Fatal("account with the given name already exists", "name", name, "service", svc)
 		} else if err != keyring.ErrNotFound {
 			log.Fatal("error checking for existing account in keyring", "error", err)
 		}
 
-		// Extract the API key from the Amp secrets.json file
+		// Read credentials from the appropriate source and store as a string in the keyring.
+		// Amp stores a plain API key; Claude stores a JSON-encoded ClaudeStoredCredentials blob.
+		var storedValue string
+		switch svc {
+		case internal.ServiceAmp:
+			apiKey, err := internal.ExtractApiKey(internal.Viper.GetString("amp-secrets"))
+			if err != nil {
+				log.Fatal("unable to extract api key from Amp secrets.json", "error", err)
+			}
+			log.Debug("extracted api key from Amp secrets.json")
+			storedValue = apiKey
 
-		apiKey, err := internal.ExtractApiKey(internal.Viper.GetString("secrets"))
-		if err != nil {
-			log.Fatal("unable to extract api key from amp secrets.json", "error", err)
-		}
-		log.Debug("extracted api key from amp secrets.json", "apiKey", apiKey)
+		case internal.ServiceClaude:
+			stored, err := internal.ExtractClaudeCredentials(
+				internal.Viper.GetString("claude-config"),
+				internal.Viper.GetString("claude-creds"),
+			)
+			if err != nil {
+				log.Fatal("unable to extract Claude Code credentials", "error", err)
+			}
+			log.Debug("extracted Claude Code credentials")
+			storedJSON, err := json.Marshal(stored)
+			if err != nil {
+				log.Fatal("unable to marshal Claude Code credentials", "error", err)
+			}
+			storedValue = string(storedJSON)
 
-		err = keyring.Set("amped", args[0], apiKey)
-		if err != nil {
-			log.Fatal("unable to save api key to keyring", "error", err)
+		default:
+			log.Fatal("unsupported service", "service", svc)
 		}
-		// Try to retrieve the API key from the keyring
-		retrievedApiKey, err := keyring.Get("amped", args[0])
-		if err != nil {
-			log.Fatal("unable to retrieve api key from keyring", "error", err)
+
+		if err = internal.WriteToKeyring(svc, name, storedValue); err != nil {
+			log.Fatal("unable to save credentials to keyring", "error", err)
 		}
-		log.Debug("retrieved api key from keyring", "apiKey", retrievedApiKey)
-		log.Info("successfully added account to keyring", "name", args[0])
-		err = internal.AppendToAccounts(internal.Viper.GetString("accounts"), internal.AmpedAccount{Name: args[0]})
+		// Try to retrieve the credentials back from the keyring to verify storage
+		retrievedValue, err := internal.ReadFromKeyring(svc, name)
 		if err != nil {
+			log.Fatal("unable to retrieve credentials from keyring", "error", err)
+		}
+		log.Debug("retrieved credentials from keyring", "name", name, "service", svc, "stored", retrievedValue != "")
+		log.Info("successfully added account to keyring", "name", name, "service", svc)
+
+		// AppendToAccounts also updates LastService so bare commands default to this service next time
+		if err = internal.AppendToAccounts(internal.Viper.GetString("accounts"), internal.Account{Name: name, Service: svc}); err != nil {
 			log.Fatal("unable to add account to accounts list", "error", err)
 		}
-		log.Debug("successfully added account to accounts list", "name", args[0])
+		log.Debug("successfully added account to accounts list", "name", name, "service", svc)
 	},
-	Args: cobra.ExactArgs(1),
 }
 
 func init() {

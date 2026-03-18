@@ -22,68 +22,89 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"encoding/json"
+
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
 
-// switchCmd represents the switch command
 var switchCmd = &cobra.Command{
 	Use:   "switch name",
-	Short: "Switch to a given saved Amp account",
-	Long: `Switch between saved Amp (http://ampcode.com/) accounts by switching out ~/.local/share/amp/secrets.json
-Provide the name of the saved account to switch to.`,
-	Args: cobra.ExactArgs(1),
+	Short: "Switch to a saved account",
+	Long:  `Restore credentials for a previously saved account, making it the active account.`,
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]
-		// Check if the account exists
-		key, err := internal.ReadFromKeyring(name)
+
+		svc, err := resolveService()
+		if err != nil {
+			log.Fatal("unable to determine service", "error", err)
+		}
+
+		// Retrieve the stored credentials string from the keyring
+		stored, err := internal.ReadFromKeyring(svc, name)
 		if err == keyring.ErrNotFound {
-			log.Fatal("no account found with the given name", "name", name)
+			log.Fatal("no account found with the given name", "name", name, "service", svc)
 		} else if err != nil {
-			log.Fatal("failed to read from keyring", "error", err, "accountName", name)
+			log.Fatal("failed to read from keyring", "error", err, "name", name)
 		}
-		log.Debug("read api key from keyring", "accountName", name, "apiKey", key)
+		log.Debug("read credentials from keyring", "name", name, "service", svc)
 
-		err = internal.WriteToAmpSecrets(key, internal.Viper.GetString("secrets"))
-		if err != nil {
-			log.Fatal("unable to write api key to amp secrets.json", "error", err)
-		}
-		log.Info("switched amp account successfully", "accountName", name)
+		switch svc {
+		case internal.ServiceAmp:
+			if err = internal.WriteToAmpSecrets(stored, internal.Viper.GetString("amp-secrets")); err != nil {
+				log.Fatal("unable to write api key to Amp secrets.json", "error", err)
+			}
+			// Make sure the key we just wrote matches what was in the keyring
+			verified, err := internal.ExtractApiKey(internal.Viper.GetString("amp-secrets"))
+			if err != nil {
+				log.Fatal("unable to verify Amp secrets.json after switch", "error", err)
+			}
+			if verified != stored {
+				log.Fatal("api key in Amp secrets.json does not match the keyring after switching account", "name", name)
+			}
+			log.Debug("verified Amp api key written successfully", "name", name)
 
-		// Update the current account in the accounts list
-		err = internal.UpdateActiveAccount(internal.Viper.GetString("accounts"), name)
-		if err != nil {
-			log.Fatal("unable to update current account in accounts list", "error", err)
-		}
-		log.Debug("successfully updated current account in accounts list", "accountName", name)
+		case internal.ServiceClaude:
+			var claudeCreds internal.ClaudeStoredCredentials
+			if err = json.Unmarshal([]byte(stored), &claudeCreds); err != nil {
+				log.Fatal("unable to unmarshal stored Claude Code credentials", "error", err)
+			}
+			if err = internal.WriteToClaudeCredentials(claudeCreds,
+				internal.Viper.GetString("claude-config"),
+				internal.Viper.GetString("claude-creds"),
+			); err != nil {
+				log.Fatal("unable to write Claude Code credentials", "error", err)
+			}
 
-		// Make sure that the keyring api key and amp secrets.json api key match
-		verifiedApiKey, err := internal.ExtractApiKey(internal.Viper.GetString("secrets"))
-		if err != nil {
-			log.Fatal("unable to extract api key from amp secrets.json for verification", "error", err)
+		default:
+			log.Fatal("unsupported service", "service", svc)
 		}
-		if verifiedApiKey != key {
-			log.Fatal("api key in amp secrets.json does not match the one in keyring after switching account", "accountName", name)
+
+		log.Info("switched account successfully", "name", name, "service", svc)
+
+		// UpdateActiveAccount also updates LastService so bare commands default to this service next time
+		if err = internal.UpdateActiveAccount(internal.Viper.GetString("accounts"), name, svc); err != nil {
+			log.Fatal("unable to update active account in accounts list", "error", err)
 		}
-		log.Debug("verified that api key in amp secrets.json matches the one in keyring", "accountName", name)
 
 		// It is NOT needed to delete threads/history when switching accounts.
 
 		// // Delete all threads
 		// err = internal.DeleteAllThreads(internal.Viper.GetString("threads"))
 		// if err != nil {
-		// 	log.Fatal("unable to delete amp threads", "error", err)
+		// 	log.Fatal("unable to delete threads", "error", err)
 		// }
-		// log.Info("successfully deleted all amp threads after switching account")
+		// log.Info("successfully deleted all threads after switching account")
 
 		// // Delete history file
 		// err = internal.DeleteHistoryFile(internal.Viper.GetString("history"))
 		// if err != nil {
-		// 	log.Fatal("unable to delete amp history file", "error", err)
+		// 	log.Fatal("unable to delete history file", "error", err)
 		// }
-		// log.Info("successfully deleted amp history file after switching account")
+		// log.Info("successfully deleted history file after switching account")
 	},
 }
 

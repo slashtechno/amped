@@ -29,29 +29,42 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// statusCmd represents the status command
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Get information regarding current Amp accounts",
-	Long: `Get information regarding current Amp accounts. 
-Includes which account is currently active and a list of all saved accounts.`,
+	Short: "Show saved accounts and which are active",
+	Long: `Show saved accounts and which are currently active.
+Use --service to filter to a specific service.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		list, err := internal.ReadFromAccounts(internal.Viper.GetString("accounts"))
 		if err != nil {
 			fmt.Println("Unable to read accounts list:", err)
 			return
 		}
-		// fmt.Println("Current active account:", list.Active)
+
+		filter := internal.Service(internal.Viper.GetString("service"))
+
 		fmt.Println("Saved accounts:")
 		for _, account := range list.Accounts {
-			if account.Name == list.Active {
-				// fmt.Println(" - [X] ", account.Name, "(active)")
-				color.Green(" - [X] %s", account.Name)
+			if filter != "" && account.Service != filter {
 				continue
 			}
-			// fmt.Println(" - [ ] ", account.Name)
-			// Light grey color for inactive accounts
-			color.HiBlack(" - [ ] %s", account.Name)
+
+			var activeForService string
+			switch account.Service {
+			case internal.ServiceAmp:
+				activeForService = list.ActiveAmp
+			case internal.ServiceClaude:
+				activeForService = list.ActiveClaude
+			}
+
+			if account.Name == activeForService {
+				// fmt.Printf(" - [X] %-20s [%s]\n", account.Name, account.Service)
+				color.Green(" - [X] %-20s [%s]", account.Name, account.Service)
+			} else {
+				// Light grey color for inactive accounts
+				// fmt.Printf(" - [ ] %-20s [%s]\n", account.Name, account.Service)
+				color.HiBlack(" - [ ] %-20s [%s]", account.Name, account.Service)
+			}
 		}
 		fmt.Println()
 	},
@@ -59,5 +72,4 @@ Includes which account is currently active and a list of all saved accounts.`,
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
-
 }

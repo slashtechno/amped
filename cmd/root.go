@@ -35,17 +35,18 @@ var cfgFile string
 
 var defaultAmpedConfigPath string
 
-// defaultAmpSecretsPath doesn't need to be glboal
+// defaultAmpSecretsPath and defaultClaudeConfigPath don't need to be global
 var defaultAmpedAccountsPath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "amped",
-	Short: "A utility to switch between Amp (http://ampcode.com/) accounts",
-	Long: fmt.Sprintf(`Switch between Amp (http://ampcode.com/) accounts by switching out %s
-First, log in with an Amp account using the Amp CLI and then, run 'amped add <name>' to save the account.
-Then, you can switch between saved accounts using 'amped switch <name>'
-To delete a saved account (won't log you out if it's the active account), use 'amped delete <name>'`, defaultAmpedAccountsPath),
+	Short: "A utility to switch between Amp and Claude Code accounts",
+	Long: `Switch between Amp (http://ampcode.com/) and Claude Code accounts.
+
+Log in with an account using its CLI, then save it with 'amped add <name> --service <amp|claude>'.
+Switch between saved accounts with 'amped switch <name> --service <amp|claude>'.
+Omit --service to reuse the last-used service automatically.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) {},
@@ -83,6 +84,8 @@ func init() {
 		log.Fatal("unable to get user home directory", "error", err)
 	}
 	defaultAmpSecretsPath := fmt.Sprintf("%s/.local/share/amp/secrets.json", home)
+	defaultClaudeConfigPath := fmt.Sprintf("%s/.claude/.claude.json", home)
+	defaultClaudeCredsPath := fmt.Sprintf("%s/.claude/.credentials.json", home)
 
 	defaultAmpedAccountsPath, err = xdg.StateFile("amped.json")
 	if err != nil {
@@ -93,10 +96,22 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", configFileHelp)
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringP("secrets", "s", "", fmt.Sprintf("path to Amp secrets file (default is %s)", defaultAmpSecretsPath))
-	rootCmd.MarkFlagFilename("secrets", "json")
-	internal.Viper.BindPFlag("secrets", rootCmd.PersistentFlags().Lookup("secrets"))
-	internal.Viper.SetDefault("secrets", defaultAmpSecretsPath)
+	rootCmd.PersistentFlags().StringP("amp-secrets", "s", "", fmt.Sprintf("path to Amp secrets file (default is %s)", defaultAmpSecretsPath))
+	rootCmd.MarkFlagFilename("amp-secrets", "json")
+	internal.Viper.BindPFlag("amp-secrets", rootCmd.PersistentFlags().Lookup("amp-secrets"))
+	internal.Viper.SetDefault("amp-secrets", defaultAmpSecretsPath)
+
+	// On Linux, Claude Code stores credentials in a file; on macOS they are in the Keychain.
+	// The claude-creds flag is only used on Linux/other platforms.
+	rootCmd.PersistentFlags().String("claude-config", "", fmt.Sprintf("path to Claude Code config file (default is %s)", defaultClaudeConfigPath))
+	rootCmd.MarkFlagFilename("claude-config", "json")
+	internal.Viper.BindPFlag("claude-config", rootCmd.PersistentFlags().Lookup("claude-config"))
+	internal.Viper.SetDefault("claude-config", defaultClaudeConfigPath)
+
+	rootCmd.PersistentFlags().String("claude-creds", "", fmt.Sprintf("path to Claude Code credentials file, Linux only (default is %s)", defaultClaudeCredsPath))
+	rootCmd.MarkFlagFilename("claude-creds", "json")
+	internal.Viper.BindPFlag("claude-creds", rootCmd.PersistentFlags().Lookup("claude-creds"))
+	internal.Viper.SetDefault("claude-creds", defaultClaudeCredsPath)
 
 	// rootCmd.PersistentFlags().String("threads", "", fmt.Sprintf("path to Amp threads directory (default is %s)", defaultAmpThreadsPath))
 	// rootCmd.MarkFlagDirname("threads")
@@ -108,10 +123,13 @@ func init() {
 	// internal.Viper.BindPFlag("history", rootCmd.PersistentFlags().Lookup("history"))
 	// internal.Viper.SetDefault("history", defaultAmpHistoryPath)
 
-	rootCmd.PersistentFlags().String("accounts", "", fmt.Sprintf("path to Amp list of accounts file (default is %s)", defaultAmpedAccountsPath))
+	rootCmd.PersistentFlags().String("accounts", "", fmt.Sprintf("path to accounts file (default is %s)", defaultAmpedAccountsPath))
 	rootCmd.MarkFlagFilename("accounts", "json")
 	internal.Viper.BindPFlag("accounts", rootCmd.PersistentFlags().Lookup("accounts"))
 	internal.Viper.SetDefault("accounts", defaultAmpedAccountsPath)
+
+	rootCmd.PersistentFlags().StringP("service", "S", "", "service to use: amp (a) or claude (c)")
+	internal.Viper.BindPFlag("service", rootCmd.PersistentFlags().Lookup("service"))
 
 	rootCmd.PersistentFlags().StringP("log", "l", "info", "log level (debug, info, warn, error, fatal, panic)")
 	internal.Viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
