@@ -128,7 +128,7 @@ func init() {
 	internal.Viper.BindPFlag("accounts", rootCmd.PersistentFlags().Lookup("accounts"))
 	internal.Viper.SetDefault("accounts", defaultAmpedAccountsPath)
 
-	rootCmd.PersistentFlags().StringP("service", "S", "", "service to use: amp (a) or claude (c)")
+	rootCmd.PersistentFlags().StringP("service", "S", "", "service to use: amp or claude")
 	internal.Viper.BindPFlag("service", rootCmd.PersistentFlags().Lookup("service"))
 
 	rootCmd.PersistentFlags().StringP("log", "l", "info", "log level (debug, info, warn, error, fatal, panic)")
