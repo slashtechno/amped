@@ -3,10 +3,12 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/zalando/go-keyring"
 )
@@ -45,7 +47,22 @@ func ExtractApiKey(secretsPath string) (string, error) {
 	return secrets.APIKeyHTTPSAmpcodeCom, nil
 }
 
-// ExtractClaudeCredentials reads the current Claude Code credentials and oauth account info.
+// ResolveClaudeConfigPath returns the path to Claude Code's config file.
+// Newer Claude Code uses ~/.claude.json; older versions use ~/.claude/.claude.json.
+func ResolveClaudeConfigPath(defaultPath string) string {
+	legacy := strings.Replace(defaultPath, ".claude.json", ".claude/.claude.json", 1)
+	if data, err := os.ReadFile(legacy); err == nil {
+		var v map[string]json.RawMessage
+		if json.Unmarshal(data, &v) == nil {
+			if _, ok := v["oauthAccount"]; ok {
+				return legacy
+			}
+		}
+	}
+	return defaultPath
+}
+
+// ExtractClaudeCredentials reads the current Claude Code credentials and oauthAccount from the config.
 // On macOS, credentials are read from the system Keychain ("Claude Code-credentials").
 // On Linux/other, credentials are read from the file at claudeCredsPath.
 func ExtractClaudeCredentials(claudeConfigPath, claudeCredsPath string) (ClaudeStoredCredentials, error) {
@@ -54,12 +71,19 @@ func ExtractClaudeCredentials(claudeConfigPath, claudeCredsPath string) (ClaudeS
 		return ClaudeStoredCredentials{}, fmt.Errorf("unable to read Claude Code credentials: %w", err)
 	}
 
-	oauth, err := readClaudeOAuthAccount(claudeConfigPath)
-	if err != nil {
-		return ClaudeStoredCredentials{}, fmt.Errorf("unable to read Claude Code oauth account: %w", err)
+	var oauthAccount string
+	configData, err := os.ReadFile(ResolveClaudeConfigPath(claudeConfigPath))
+	if err == nil && len(configData) > 0 {
+		var config map[string]any
+		if err := json.Unmarshal(configData, &config); err == nil {
+			if oauth, ok := config["oauthAccount"]; ok {
+				oauthBytes, _ := json.Marshal(oauth)
+				oauthAccount = string(oauthBytes)
+			}
+		}
 	}
 
-	return ClaudeStoredCredentials{Credentials: creds, OAuthAccount: oauth}, nil
+	return ClaudeStoredCredentials{Credentials: creds, OAuthAccount: oauthAccount}, nil
 }
 
 // readClaudeCredentialsBlob returns the raw credentials JSON string from Claude Code's storage.
@@ -84,20 +108,53 @@ func readClaudeCredentialsBlob(credsFilePath string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// readClaudeOAuthAccount reads the oauthAccount section from ~/.claude/.claude.json.
-func readClaudeOAuthAccount(claudeConfigPath string) (*ClaudeOAuthAccount, error) {
-	data, err := os.ReadFile(claudeConfigPath)
-	if os.IsNotExist(err) {
-		return nil, nil
+// ExtractClaudeAccountDetails pulls the email and subscriptionType from stored credentials
+// for display purposes, and returns the accessToken for use in live verification.
+func ExtractClaudeAccountDetails(stored ClaudeStoredCredentials) (email, subscriptionType, accessToken string) {
+	var credsBlob struct {
+		ClaudeAiOauth struct {
+			AccessToken      string `json:"accessToken"`
+			SubscriptionType string `json:"subscriptionType"`
+		} `json:"claudeAiOauth"`
 	}
-	if err != nil {
-		return nil, err
+	if err := json.Unmarshal([]byte(stored.Credentials), &credsBlob); err == nil {
+		accessToken = credsBlob.ClaudeAiOauth.AccessToken
+		subscriptionType = credsBlob.ClaudeAiOauth.SubscriptionType
 	}
-	var config struct {
-		OAuthAccount *ClaudeOAuthAccount `json:"oauthAccount"`
+	if stored.OAuthAccount != "" {
+		var oauthAccount struct {
+			EmailAddress string `json:"emailAddress"`
+		}
+		if err := json.Unmarshal([]byte(stored.OAuthAccount), &oauthAccount); err == nil {
+			email = oauthAccount.EmailAddress
+		}
 	}
-	if err = json.Unmarshal(data, &config); err != nil {
-		return nil, err
-	}
-	return config.OAuthAccount, nil
+	return
 }
+
+// VerifyClaudeToken makes a live request to the Anthropic API to confirm the access token
+// is valid, returning the organization name associated with the account.
+func VerifyClaudeToken(accessToken string) (orgName string, err error) {
+	req, err := http.NewRequest("GET", "https://api.anthropic.com/api/oauth/claude_cli/roles", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var body struct {
+		OrgName string `json:"organization_name"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return
+	}
+	return body.OrgName, nil
+}
+

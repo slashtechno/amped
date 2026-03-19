@@ -84,7 +84,7 @@ func init() {
 		log.Fatal("unable to get user home directory", "error", err)
 	}
 	defaultAmpSecretsPath := fmt.Sprintf("%s/.local/share/amp/secrets.json", home)
-	defaultClaudeConfigPath := fmt.Sprintf("%s/.claude/.claude.json", home)
+	defaultClaudeConfigPath := fmt.Sprintf("%s/.claude.json", home)
 	defaultClaudeCredsPath := fmt.Sprintf("%s/.claude/.credentials.json", home)
 
 	defaultAmpedAccountsPath, err = xdg.StateFile("amped.json")

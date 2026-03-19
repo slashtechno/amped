@@ -68,6 +68,13 @@ var switchCmd = &cobra.Command{
 			log.Debug("verified Amp api key written successfully", "name", name)
 
 		case internal.ServiceClaude:
+			// Run claude auth logout before applying new credentials to ensure a clean state
+			log.Info("logging out of Claude before switch")
+			if err := internal.LogoutClaude(); err != nil {
+				// We don't fatal here because Claude might not be in the PATH
+				log.Warn("unable to run claude auth logout", "error", err)
+			}
+
 			var claudeCreds internal.ClaudeStoredCredentials
 			if err = json.Unmarshal([]byte(stored), &claudeCreds); err != nil {
 				log.Fatal("unable to unmarshal stored Claude Code credentials", "error", err)
@@ -77,6 +84,15 @@ var switchCmd = &cobra.Command{
 				internal.Viper.GetString("claude-creds"),
 			); err != nil {
 				log.Fatal("unable to write Claude Code credentials", "error", err)
+			}
+			email, subType, accessToken := internal.ExtractClaudeAccountDetails(claudeCreds)
+			if email != "" || subType != "" {
+				log.Info("account details", "email", email, "subscription", subType)
+			}
+			if orgName, liveErr := internal.VerifyClaudeToken(accessToken); liveErr != nil {
+				log.Warn("live verification failed", "error", liveErr)
+			} else {
+				log.Info("live verified", "org", orgName)
 			}
 
 		default:

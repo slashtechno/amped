@@ -17,8 +17,8 @@ Amped has four commands: `add`, `switch`, `status`, and `delete`. All commands a
 
 - `amped add name --service <amp|claude>`: Saves the currently logged-in account to the keyring under the given name.
     - For Amp, reads the API key from `~/.local/share/amp/secrets.json`.
-    - For Claude Code, reads credentials from the system keychain (macOS) or `~/.claude/.credentials.json` (Linux), plus account info from `~/.claude/.claude.json`. Windows is not supported for Claude Code accounts.
-- `amped switch name`: Restores credentials for a previously saved account, making it active.
+    - For Claude Code, reads credentials from the system keychain (macOS) or `~/.claude/.credentials.json` (Linux). Windows is not supported for Claude Code accounts.
+- `amped switch name`: Restores credentials for a previously saved account, making it active. For Claude Code, also reads account info from `~/.claude.json` (or `~/.claude/.claude.json` on older versions) and merges it back on switch.
 - `amped status`: Shows all saved accounts and which are currently active. Use `--service` to filter.
 - `amped delete name`: Removes the given account from the keyring and accounts list.
     - `amped delete --delete-all` removes all saved accounts entirely.

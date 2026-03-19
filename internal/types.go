@@ -13,21 +13,16 @@ type AmpSecrets struct {
 	APIKeyHTTPSAmpcodeCom string `json:"apiKey@https://ampcode.com/"`
 }
 
-// ClaudeStoredCredentials packages the credentials blob and oauth account info
+// ClaudeStoredCredentials packages the credentials blob and OAuth account info
 // needed to fully restore a Claude Code account.
 type ClaudeStoredCredentials struct {
 	// Credentials is the raw JSON blob from Claude Code's credential storage.
-	// On macOS, this comes from the Keychain entry "Claude Code-credentials".
-	// On Linux, this comes from ~/.claude/.credentials.json.
-	Credentials  string              `json:"credentials"`
-	OAuthAccount *ClaudeOAuthAccount `json:"oauthAccount,omitempty"`
-}
-
-// ClaudeOAuthAccount represents the oauthAccount section of ~/.claude/.claude.json,
-// which identifies which account Claude Code considers currently logged in.
-type ClaudeOAuthAccount struct {
-	EmailAddress string `json:"emailAddress"`
-	AccountUUID  string `json:"accountUuid"`
+	// On macOS this comes from the Keychain entry "Claude Code-credentials".
+	// On Linux this comes from ~/.claude/.credentials.json.
+	Credentials string `json:"credentials"`
+	// OAuthAccount is the oauthAccount JSON section from ~/.claude.json.
+	// On switch, this is merged back into the live config, leaving other settings intact.
+	OAuthAccount string `json:"oauthAccount,omitempty"`
 }
 
 // Account represents a single saved account entry in amped's accounts file.

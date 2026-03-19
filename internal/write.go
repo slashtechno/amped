@@ -155,9 +155,9 @@ func WriteToClaudeCredentials(stored ClaudeStoredCredentials, claudeConfigPath, 
 	if err := writeClaudeCredentialsBlob(stored.Credentials, claudeCredsPath); err != nil {
 		return fmt.Errorf("unable to write Claude Code credentials: %w", err)
 	}
-	if stored.OAuthAccount != nil {
-		if err := writeClaudeOAuthAccount(claudeConfigPath, stored.OAuthAccount); err != nil {
-			return fmt.Errorf("unable to write Claude Code oauth account: %w", err)
+	if stored.OAuthAccount != "" {
+		if err := mergeClaudeOAuthAccount(ResolveClaudeConfigPath(claudeConfigPath), stored.OAuthAccount); err != nil {
+			return fmt.Errorf("unable to write oauthAccount to Claude config: %w", err)
 		}
 	}
 	return nil
@@ -166,12 +166,11 @@ func WriteToClaudeCredentials(stored ClaudeStoredCredentials, claudeConfigPath, 
 // writeClaudeCredentialsBlob writes the raw credentials JSON string to Claude Code's storage.
 func writeClaudeCredentialsBlob(credentials, credsFilePath string) error {
 	if runtime.GOOS == "darwin" {
-		// -U updates the entry if it already exists
 		username := os.Getenv("USER")
 		if username == "" {
 			username = "user"
 		}
-		cmd := exec.Command("security", "add-generic-password", "-U",
+		cmd := exec.Command("security", "add-generic-password", "-U", // -U updates the entry if it already exists
 			"-s", "Claude Code-credentials",
 			"-a", username,
 			"-w", credentials,
@@ -189,23 +188,21 @@ func writeClaudeCredentialsBlob(credentials, credsFilePath string) error {
 	return os.WriteFile(credsFilePath, []byte(credentials), 0600)
 }
 
-// writeClaudeOAuthAccount updates only the oauthAccount field in ~/.claude/.claude.json,
-// preserving all other existing fields in the file.
-func writeClaudeOAuthAccount(claudeConfigPath string, account *ClaudeOAuthAccount) error {
-	// Read the existing config as a raw map so we don't clobber unrelated fields
-	config := make(map[string]interface{})
-	data, err := os.ReadFile(claudeConfigPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
+// mergeClaudeOAuthAccount merges the stored oauthAccount JSON into the live config
+// at claudeConfigPath, leaving all other fields intact.
+func mergeClaudeOAuthAccount(claudeConfigPath, oauthAccountJSON string) error {
+	var oauthAccount json.RawMessage
+	if err := json.Unmarshal([]byte(oauthAccountJSON), &oauthAccount); err != nil {
+		return fmt.Errorf("unable to parse stored oauth account: %w", err)
 	}
-	if len(data) > 0 {
+
+	config := make(map[string]json.RawMessage)
+	if data, err := os.ReadFile(claudeConfigPath); err == nil && len(data) > 0 {
 		if err = json.Unmarshal(data, &config); err != nil {
 			return err
 		}
 	}
-
-	config["oauthAccount"] = account
-
+	config["oauthAccount"] = oauthAccount
 	out, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
@@ -231,4 +228,12 @@ func DeleteHistoryFile(historyPath string) error {
 		return err
 	}
 	return nil
+}
+
+// LogoutClaude runs 'claude auth logout' to clear any current session.
+func LogoutClaude() error {
+	cmd := exec.Command("claude", "auth", "logout")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
