@@ -22,6 +22,7 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/fatih/color"
@@ -64,6 +65,28 @@ Use --service to filter to a specific service.`,
 				// Light grey color for inactive accounts
 				// fmt.Printf(" - [ ] %-20s [%s]\n", account.Name, account.Service)
 				color.HiBlack(" - [ ] %-20s [%s]", account.Name, account.Service)
+			}
+		}
+
+		if filter == internal.ServiceClaude || filter == "" {
+			active := list.ActiveClaude
+			if active != "" {
+				stored, readErr := internal.ReadFromKeyring(internal.ServiceClaude, active)
+				if readErr == nil {
+					var creds internal.ClaudeStoredCredentials
+					if jsonErr := json.Unmarshal([]byte(stored), &creds); jsonErr == nil {
+						_, _, accessToken := internal.ExtractClaudeAccountDetails(creds)
+						if accessToken != "" {
+							if email, org, verifyErr := internal.VerifyClaudeToken(accessToken); verifyErr != nil {
+								color.Yellow("Live Claude auth: invalid (%v)", verifyErr)
+							} else if email != "" || org != "" {
+								color.Green("Live Claude auth: valid (email=%s org=%s)", email, org)
+							} else {
+								color.Green("Live Claude auth: valid")
+							}
+						}
+					}
+				}
 			}
 		}
 		fmt.Println()

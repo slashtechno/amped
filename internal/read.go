@@ -133,13 +133,14 @@ func ExtractClaudeAccountDetails(stored ClaudeStoredCredentials) (email, subscri
 }
 
 // VerifyClaudeToken makes a live request to the Anthropic API to confirm the access token
-// is valid, returning the organization name associated with the account.
-func VerifyClaudeToken(accessToken string) (orgName string, err error) {
-	req, err := http.NewRequest("GET", "https://api.anthropic.com/api/oauth/claude_cli/roles", nil)
+// is valid, returning live account email and organization name when available.
+func VerifyClaudeToken(accessToken string) (email, orgName string, err error) {
+	req, err := http.NewRequest("GET", "https://api.anthropic.com/api/oauth/profile", nil)
 	if err != nil {
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -147,14 +148,18 @@ func VerifyClaudeToken(accessToken string) (orgName string, err error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status %d", resp.StatusCode)
+		return "", "", fmt.Errorf("status %d", resp.StatusCode)
 	}
 	var body struct {
-		OrgName string `json:"organization_name"`
+		Account struct {
+			Email string `json:"email"`
+		} `json:"account"`
+		Organization struct {
+			Name string `json:"name"`
+		} `json:"organization"`
 	}
 	if err = json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return
 	}
-	return body.OrgName, nil
+	return body.Account.Email, body.Organization.Name, nil
 }
-

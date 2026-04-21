@@ -23,12 +23,20 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
+
+func forceClaudeLogout(reason string) {
+	log.Warn(reason)
+	if err := internal.LogoutClaude(); err != nil {
+		log.Warn("unable to run claude auth logout", "error", err)
+	}
+}
 
 var switchCmd = &cobra.Command{
 	Use:   "switch name",
@@ -83,16 +91,28 @@ var switchCmd = &cobra.Command{
 				internal.Viper.GetString("claude-config"),
 				internal.Viper.GetString("claude-creds"),
 			); err != nil {
+				forceClaudeLogout("switch failed while writing Claude credentials; leaving Claude logged out")
 				log.Fatal("unable to write Claude Code credentials", "error", err)
 			}
 			email, subType, accessToken := internal.ExtractClaudeAccountDetails(claudeCreds)
 			if email != "" || subType != "" {
 				log.Info("account details", "email", email, "subscription", subType)
 			}
-			if orgName, liveErr := internal.VerifyClaudeToken(accessToken); liveErr != nil {
-				log.Warn("live verification failed", "error", liveErr)
+
+			if accessToken == "" {
+				forceClaudeLogout("restored Claude credentials did not include an access token; leaving Claude logged out")
+				log.Fatal("switch aborted: restored Claude credentials are missing access token")
+			}
+
+			if liveEmail, orgName, liveErr := internal.VerifyClaudeToken(accessToken); liveErr != nil {
+				forceClaudeLogout("live verification failed after restoring Claude credentials; leaving Claude logged out")
+				log.Fatal("switch aborted: Claude auth is invalid after restore", "error", fmt.Errorf("token verification failed: %w", liveErr))
 			} else {
-				log.Info("live verified", "org", orgName)
+				if liveEmail != "" || orgName != "" {
+					log.Info("live verified", "email", liveEmail, "org", orgName)
+				} else {
+					log.Info("live verified")
+				}
 			}
 
 		default:
