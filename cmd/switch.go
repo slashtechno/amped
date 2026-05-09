@@ -23,20 +23,12 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/charmbracelet/log"
 	"github.com/slashtechno/amped/internal"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
-
-func forceClaudeLogout(reason string) {
-	log.Warn(reason)
-	if err := internal.LogoutClaude(); err != nil {
-		log.Warn("unable to run claude auth logout", "error", err)
-	}
-}
 
 var switchCmd = &cobra.Command{
 	Use:   "switch name",
@@ -60,6 +52,47 @@ var switchCmd = &cobra.Command{
 		}
 		log.Debug("read credentials from keyring", "name", name, "service", svc)
 
+		// Auto-update the currently active account before switching
+		if accounts, err := internal.ReadFromAccounts(internal.Viper.GetString("accounts")); err == nil {
+			var activeAccount string
+			switch svc {
+			case internal.ServiceAmp:
+				activeAccount = accounts.ActiveAmp
+			case internal.ServiceClaude:
+				activeAccount = accounts.ActiveClaude
+			}
+
+			if activeAccount != "" && activeAccount != name {
+				log.Info("auto-updating currently active account before switching", "name", activeAccount)
+				var storedValue string
+				var updateErr error
+				switch svc {
+				case internal.ServiceAmp:
+					storedValue, updateErr = internal.ExtractApiKey(internal.Viper.GetString("amp-secrets"))
+				case internal.ServiceClaude:
+					var storedCreds internal.ClaudeStoredCredentials
+					storedCreds, updateErr = internal.ExtractClaudeCredentials(
+						internal.Viper.GetString("claude-config"),
+						internal.Viper.GetString("claude-creds"),
+					)
+					if updateErr == nil {
+						var storedJSON []byte
+						storedJSON, updateErr = json.Marshal(storedCreds)
+						storedValue = string(storedJSON)
+					}
+				}
+				if updateErr != nil {
+					log.Warn("failed to extract credentials for auto-update (skipping)", "error", updateErr)
+				} else if storedValue != "" {
+					if err := internal.WriteToKeyring(svc, activeAccount, storedValue); err != nil {
+						log.Warn("failed to save auto-updated credentials to keyring", "error", err)
+					} else {
+						log.Debug("successfully auto-updated active account", "name", activeAccount)
+					}
+				}
+			}
+		}
+
 		switch svc {
 		case internal.ServiceAmp:
 			if err = internal.WriteToAmpSecrets(stored, internal.Viper.GetString("amp-secrets")); err != nil {
@@ -76,13 +109,6 @@ var switchCmd = &cobra.Command{
 			log.Debug("verified Amp api key written successfully", "name", name)
 
 		case internal.ServiceClaude:
-			// Run claude auth logout before applying new credentials to ensure a clean state
-			log.Info("logging out of Claude before switch")
-			if err := internal.LogoutClaude(); err != nil {
-				// We don't fatal here because Claude might not be in the PATH
-				log.Warn("unable to run claude auth logout", "error", err)
-			}
-
 			var claudeCreds internal.ClaudeStoredCredentials
 			if err = json.Unmarshal([]byte(stored), &claudeCreds); err != nil {
 				log.Fatal("unable to unmarshal stored Claude Code credentials", "error", err)
@@ -91,7 +117,6 @@ var switchCmd = &cobra.Command{
 				internal.Viper.GetString("claude-config"),
 				internal.Viper.GetString("claude-creds"),
 			); err != nil {
-				forceClaudeLogout("switch failed while writing Claude credentials; leaving Claude logged out")
 				log.Fatal("unable to write Claude Code credentials", "error", err)
 			}
 			email, subType, accessToken := internal.ExtractClaudeAccountDetails(claudeCreds)
@@ -100,13 +125,11 @@ var switchCmd = &cobra.Command{
 			}
 
 			if accessToken == "" {
-				forceClaudeLogout("restored Claude credentials did not include an access token; leaving Claude logged out")
 				log.Fatal("switch aborted: restored Claude credentials are missing access token")
 			}
 
 			if liveEmail, orgName, liveErr := internal.VerifyClaudeToken(accessToken); liveErr != nil {
-				forceClaudeLogout("live verification failed after restoring Claude credentials; leaving Claude logged out")
-				log.Fatal("switch aborted: Claude auth is invalid after restore", "error", fmt.Errorf("token verification failed: %w", liveErr))
+				log.Warn("live verification failed, but credentials have been restored. Claude Code will attempt to refresh the token on next run.", "error", liveErr)
 			} else {
 				if liveEmail != "" || orgName != "" {
 					log.Info("live verified", "email", liveEmail, "org", orgName)

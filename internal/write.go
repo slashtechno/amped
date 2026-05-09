@@ -170,6 +170,7 @@ func writeClaudeCredentialsBlob(credentials, credsFilePath string) error {
 		if username == "" {
 			username = "user"
 		}
+
 		cmd := exec.Command("security", "add-generic-password", "-U", // -U updates the entry if it already exists
 			"-s", "Claude Code-credentials",
 			"-a", username,
@@ -228,12 +229,4 @@ func DeleteHistoryFile(historyPath string) error {
 		return err
 	}
 	return nil
-}
-
-// LogoutClaude runs 'claude auth logout' to clear any current session.
-func LogoutClaude() error {
-	cmd := exec.Command("claude", "auth", "logout")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
