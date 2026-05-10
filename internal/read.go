@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
-	"runtime"
+	"os/user"
 	"strings"
 	"time"
 
@@ -87,25 +86,26 @@ func ExtractClaudeCredentials(claudeConfigPath, claudeCredsPath string) (ClaudeS
 }
 
 // readClaudeCredentialsBlob returns the raw credentials JSON string from Claude Code's storage.
+// It uses go-keyring to retrieve the credentials cross-platform, matching Claude Code's use of keytar.
 func readClaudeCredentialsBlob(credsFilePath string) (string, error) {
-	if runtime.GOOS == "darwin" {
-		out, err := exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output()
-		if err != nil {
-			// Exit code 44 means "item not found" in the macOS security tool
-			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 44 {
-				return "", fmt.Errorf("no Claude Code credentials found in keychain; make sure you are logged in to Claude Code")
-			}
-			return "", fmt.Errorf("security command failed: %w", err)
-		}
-		return strings.TrimSpace(string(out)), nil
+	u, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("unable to get current user: %w", err)
+	}
+	username := u.Username
+	if parts := strings.Split(username, "\\"); len(parts) > 1 {
+		username = parts[len(parts)-1]
 	}
 
-	// Linux/other: read from file
-	data, err := os.ReadFile(credsFilePath)
+	secret, err := keyring.Get("Claude Code-credentials", username)
 	if err != nil {
-		return "", fmt.Errorf("unable to read %s: %w", credsFilePath, err)
+		if err == keyring.ErrNotFound {
+			return "", fmt.Errorf("no Claude Code credentials found in keychain; make sure you are logged in to Claude Code")
+		}
+		return "", fmt.Errorf("keyring get failed: %w", err)
 	}
-	return strings.TrimSpace(string(data)), nil
+
+	return strings.TrimSpace(secret), nil
 }
 
 // ExtractClaudeAccountDetails pulls the email and subscriptionType from stored credentials

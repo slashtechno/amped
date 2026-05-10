@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
+	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/zalando/go-keyring"
@@ -164,29 +163,23 @@ func WriteToClaudeCredentials(stored ClaudeStoredCredentials, claudeConfigPath, 
 }
 
 // writeClaudeCredentialsBlob writes the raw credentials JSON string to Claude Code's storage.
+// It uses go-keyring to store the credentials cross-platform, matching Claude Code's use of keytar.
 func writeClaudeCredentialsBlob(credentials, credsFilePath string) error {
-	if runtime.GOOS == "darwin" {
-		username := os.Getenv("USER")
-		if username == "" {
-			username = "user"
-		}
-
-		cmd := exec.Command("security", "add-generic-password", "-U", // -U updates the entry if it already exists
-			"-s", "Claude Code-credentials",
-			"-a", username,
-			"-w", credentials,
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("security command failed: %w (output: %s)", err, strings.TrimSpace(string(out)))
-		}
-		return nil
+	u, err := user.Current()
+	if err != nil {
+		return fmt.Errorf("unable to get current user: %w", err)
+	}
+	username := u.Username
+	if parts := strings.Split(username, "\\"); len(parts) > 1 {
+		username = parts[len(parts)-1]
 	}
 
-	// Linux/other: write to file
-	if err := os.MkdirAll(filepath.Dir(credsFilePath), 0700); err != nil {
-		return err
+	err = keyring.Set("Claude Code-credentials", username, credentials)
+	if err != nil {
+		return fmt.Errorf("keyring set failed: %w", err)
 	}
-	return os.WriteFile(credsFilePath, []byte(credentials), 0600)
+
+	return nil
 }
 
 // mergeClaudeOAuthAccount merges the stored oauthAccount JSON into the live config

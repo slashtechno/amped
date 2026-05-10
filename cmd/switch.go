@@ -109,6 +109,10 @@ var switchCmd = &cobra.Command{
 			log.Debug("verified Amp api key written successfully", "name", name)
 
 		case internal.ServiceClaude:
+			// Terminate any running Claude instances to prevent them from refreshing tokens
+			// and overwriting the keychain with the old account's credentials after we switch.
+			internal.KillClaudeProcesses()
+
 			var claudeCreds internal.ClaudeStoredCredentials
 			if err = json.Unmarshal([]byte(stored), &claudeCreds); err != nil {
 				log.Fatal("unable to unmarshal stored Claude Code credentials", "error", err)
