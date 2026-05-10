@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/zalando/go-keyring"
@@ -163,7 +165,9 @@ func WriteToClaudeCredentials(stored ClaudeStoredCredentials, claudeConfigPath, 
 }
 
 // writeClaudeCredentialsBlob writes the raw credentials JSON string to Claude Code's storage.
-// It uses go-keyring to store the credentials cross-platform, matching Claude Code's use of keytar.
+// It uses the security CLI directly on macOS to avoid go-keyring's base64 encoding prefix bug,
+// which makes the credentials unreadable by Claude Code's Node.js keytar library.
+// On other platforms, it uses go-keyring.
 func writeClaudeCredentialsBlob(credentials, credsFilePath string) error {
 	u, err := user.Current()
 	if err != nil {
@@ -172,6 +176,18 @@ func writeClaudeCredentialsBlob(credentials, credsFilePath string) error {
 	username := u.Username
 	if parts := strings.Split(username, "\\"); len(parts) > 1 {
 		username = parts[len(parts)-1]
+	}
+
+	if runtime.GOOS == "darwin" {
+		cmd := exec.Command("security", "add-generic-password", "-U", // -U updates the entry if it already exists
+			"-s", "Claude Code-credentials",
+			"-a", username,
+			"-w", credentials,
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("security command failed: %w (output: %s)", err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
 
 	err = keyring.Set("Claude Code-credentials", username, credentials)

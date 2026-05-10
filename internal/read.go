@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/user"
+	"runtime"
 	"strings"
 	"time"
 
@@ -86,8 +88,21 @@ func ExtractClaudeCredentials(claudeConfigPath, claudeCredsPath string) (ClaudeS
 }
 
 // readClaudeCredentialsBlob returns the raw credentials JSON string from Claude Code's storage.
-// It uses go-keyring to retrieve the credentials cross-platform, matching Claude Code's use of keytar.
+// It uses the security CLI directly on macOS to avoid go-keyring's base64 encoding prefix bug,
+// which makes the credentials unreadable by Claude Code's Node.js keytar library.
+// On other platforms, it uses go-keyring.
 func readClaudeCredentialsBlob(credsFilePath string) (string, error) {
+	if runtime.GOOS == "darwin" {
+		out, err := exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 44 {
+				return "", fmt.Errorf("no Claude Code credentials found in keychain; make sure you are logged in to Claude Code")
+			}
+			return "", fmt.Errorf("security command failed: %w", err)
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
 	u, err := user.Current()
 	if err != nil {
 		return "", fmt.Errorf("unable to get current user: %w", err)
